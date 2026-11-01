@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RAG Lab — Retrieval-Augmented Generation</title>
+  <style>
+    :root {
+      --bg: #070b14;
+      --bg-2: #0c1220;
+      --panel: rgba(16, 24, 40, 0.72);
+      --panel-solid: #101828;
+      --line: rgba(94, 234, 212, 0.18);
+      --line-strong: rgba(94, 234, 212, 0.35);
+      --text: #e8f1ff;
+      --muted: #8fa3bf;
+      --cyan: #5eead4;
+      --cyan-dim: rgba(94, 234, 212, 0.12);
+      --violet: #a78bfa;
+      --violet-dim: rgba(167, 139, 250, 0.14);
+      --amber: #fbbf24;
+      --rose: #fb7185;
+      --ok: #34d399;
+      --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+      --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace;
+      --radius: 16px;
+      --shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, rgba(94, 234, 212, 0.12), transparent 55%),
+        radial-gradient(900px 500px at 90% 0%, rgba(167, 139, 250, 0.14), transparent 50%),
+        radial-gradient(800px 400px at 50% 100%, rgba(56, 189, 248, 0.08), transparent 45%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.55;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(94, 234, 212, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(94, 234, 212, 0.03) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .wrap {
+      position: relative;
+      z-index: 1;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 28px 18px 80px;
+    }
+
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 28px;
+      padding-bottom: 22px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .logo {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--cyan), var(--violet));
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      color: #041016;
+      box-shadow: 0 0 28px rgba(94, 234, 212, 0.35);
+    }
+
+    h1 {
+      font-size: clamp(1.6rem, 3vw, 2.1rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 0.95rem;
+      max-width: 36ch;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line-strong);
+      background: var(--cyan-dim);
+      color: var(--cyan);
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .badge::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 10px var(--cyan);
+      animation: pulse 2s ease infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      backdrop-filter: blur(16px);
+      box-shadow: var(--shadow);
+      padding: 22px;
+      margin-bottom: 18px;
+    }
+
+    .panel h2 {
+      font-size: 1.15rem;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .panel h2 .num {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: var(--violet-dim);
+      color: var(--violet);
+      display: grid;
+      place-items: center;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+
+    .panel p, .panel li {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .panel strong { color: var(--text); }
+
+    .explain-grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: 1fr;
+    }
+
+    @media (min-width: 800px) {
+      .explain-grid { grid-template-columns: 1.2fr 1fr; }
+    }
+
+    .order-box {
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      padding: 14px;
+      background: rgba(0, 0, 0, 0.25);
+    }
+
+    .order-box h3 {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 10px;
+    }
+
+    .order-box.wrong h3 { color: var(--rose); }
+    .order-box.right h3 { color: var(--ok); }
+
+    .order-box ol {
+      padding-left: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 0.88rem;
+    }
+
+    .controls {
+      display: grid;
+      gap: 14px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    input[type="text"], select {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      color: var(--text);
+      padding: 12px 14px;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input[type="text"]:focus, select:focus {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 3px var(--cyan-dim);
+    }
+
+    .presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip, .btn, .step-btn {
+      cursor: pointer;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-size: 0.85rem;
+      transition: 0.15s ease;
+    }
+
+    .chip:hover, .btn:hover, .step-btn:hover {
+      border-color: var(--cyan);
+      background: var(--cyan-dim);
+    }
+
+    .chip.active {
+      background: linear-gradient(135deg, rgba(94, 234, 212, 0.25), rgba(167, 139, 250, 0.2));
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .btn.primary {
+      background: linear-gradient(135deg, var(--cyan), #38bdf8);
+      color: #041016;
+      border: none;
+      font-weight: 700;
+      padding: 10px 18px;
+      box-shadow: 0 0 24px rgba(94, 234, 212, 0.25);
+    }
+
+    .btn.ghost {
+      background: transparent;
+    }
+
+    .steps {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      margin-bottom: 16px;
+    }
+
+    .step-btn {
+      flex: 0 0 auto;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      min-width: 110px;
+      padding: 10px 12px;
+    }
+
+    .step-btn .k {
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .step-btn.active {
+      border-color: var(--cyan);
+      background: var(--cyan-dim);
+      box-shadow: 0 0 0 1px rgba(94, 234, 212, 0.2);
+    }
+
+    .step-btn.done {
+      border-color: rgba(52, 211, 153, 0.4);
+    }
+
+    .stage-title {
+      font-size: 1.35rem;
+      margin-bottom: 6px;
+      letter-spacing: -0.02em;
+    }
+
+    .stage-desc {
+      color: var(--muted);
+      margin-bottom: 16px;
+      font-size: 0.95rem;
+    }
+
+    .grid-2 {
+      display: grid;
+      gap: 14px;
+    }
+
+    @media (min-width: 780px) {
+      .grid-2 { grid-template-columns: 1.15fr 0.85fr; }
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.28);
+      padding: 14px;
+    }
+
+    .card h4 {
+      font-size: 0.9rem;
+      margin-bottom: 8px;
+      color: var(--cyan);
+    }
+
+    .chunk {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      background: rgba(255, 255, 255, 0.02);
+      transition: 0.2s ease;
+    }
+
+    .chunk.kept {
+      border-color: rgba(52, 211, 153, 0.5);
+      background: rgba(52, 211, 153, 0.08);
+      box-shadow: 0 0 18px rgba(52, 211, 153, 0.08);
+    }
+
+    .chunk .meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .chunk .meta strong { color: var(--text); }
+
+    .bar {
+      height: 6px;
+      border-radius: 99px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+      margin-top: 6px;
+    }
+
+    .bar > span {
+      display: block;
+      height: 100%;
+      background: linear-gradient(90deg, var(--cyan), var(--violet));
+      border-radius: 99px;
+      width: 0%;
+      transition: width 0.5s ease;
+    }
+
+    .dim-row {
+      display: grid;
+      grid-template-columns: 110px 1fr 42px;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 6px;
+      font-size: 0.8rem;
+    }
+
+    .dim-row span:last-child {
+      text-align: right;
+      font-family: var(--mono);
+      color: var(--cyan);
+    }
+
+    .plot {
+      width: 100%;
+      height: 260px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background:
+        radial-gradient(circle at 30% 40%, rgba(94, 234, 212, 0.08), transparent 40%),
+        radial-gradient(circle at 70% 60%, rgba(167, 139, 250, 0.08), transparent 40%),
+        rgba(0, 0, 0, 0.35);
+    }
+
+    pre.prompt {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      line-height: 1.5;
+      color: #c7e8ff;
+      background: #050a12;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+      max-height: 320px;
+      overflow: auto;
+    }
+
+    .answer {
+      border-radius: 12px;
+      border: 1px solid rgba(52, 211, 153, 0.35);
+      background: rgba(52, 211, 153, 0.08);
+      padding: 14px;
+      min-height: 120px;
+      white-space: pre-wrap;
+      font-size: 0.95rem;
+    }
+
+    .answer.refuse {
+      border-color: rgba(251, 191, 36, 0.4);
+      background: rgba(251, 191, 36, 0.08);
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      margin-left: 6px;
+    }
+
+    .tag.live {
+      color: var(--cyan);
+      border-color: var(--cyan);
+    }
+
+    .footer-nav {
+      position: sticky;
+      bottom: 12px;
+      display: flex;
+      gap: 10px;
+      justify-content: space-between;
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(8, 12, 22, 0.9);
+      border: 1px solid var(--line);
+      backdrop-filter: blur(12px);
+      margin-top: 16px;
+      z-index: 5;
+    }
+
+    .footer-nav .btn { flex: 1; text-align: center; }
+
+    .k-control {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    input[type="range"] {
+      flex: 1;
+      accent-color: var(--cyan);
+    }
+
+    .note {
+      font-size: 0.88rem;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: var(--violet-dim);
+      border: 1px solid rgba(167, 139, 250, 0.3);
+      color: #ddd6fe;
+      margin-bottom: 14px;
+    }
+
+    .book-cover {
+      background: linear-gradient(160deg, #1e1b4b, #0f172a 60%, #134e4a);
+      border-radius: 14px;
+      padding: 20px;
+      border: 1px solid var(--line-strong);
+      min-height: 160px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .book-cover .eyebrow {
+      font-size: 0.75rem;
+      color: var(--cyan);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .book-cover h3 {
+      font-size: 1.4rem;
+      margin: 10px 0 4px;
+    }
+
+    .chapters li {
+      list-style: none;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 8px;
+      font-size: 0.9rem;
+    }
+
+    .chapters li:last-child { border-bottom: none; }
+    .chapters .n { color: var(--violet); font-weight: 700; }
+
+    .caret {
+      display: inline-block;
+      width: 8px;
+      height: 1.1em;
+      background: var(--cyan);
+      margin-left: 2px;
+      vertical-align: text-bottom;
+      animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="logo">R</div>
+        <div>
+          <h1>RAG Lab</h1>
+          <p class="subtitle">A visual simulator of Retrieval-Augmented Generation — the real order, not the hunch order.</p>
+        </div>
+      </div>
+      <div class="badge">Client-side · no API</div>
+    </header>
+
+    <!-- WHAT IS RAG -->
+    <section class="panel">
+      <h2><span class="num">?</span> What is RAG?</h2>
+      <div class="explain-grid">
+        <div>
+          <p style="margin-bottom:12px">
+            <strong>Retrieval-Augmented Generation (RAG)</strong> is a pattern where a language model
+            answers using <strong>passages fetched from your documents</strong>, not only from what
+            it memorized during training.
+          </p>
+          <p style="margin-bottom:12px">
+            You index a knowledge base ahead of time (chunk → embed → store). At question time you
+            embed the question, find the closest chunks, paste them into a prompt, and let the model
+            write from that context. That is why RAG reduces hallucination on private or fresh facts:
+            the model is steered by retrieved text.
+          </p>
+          <p>
+            Think of it as an open-book exam: the model can only “see” the pages you put on the desk
+            for that question.
+          </p>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="order-box wrong">
+            <h3>Common mix-up</h3>
+            <ol>
+              <li>Guess relevant chapters</li>
+              <li>Embed only those</li>
+              <li>“Format” the query</li>
+              <li>Call the model</li>
+            </ol>
+          </div>
+          <div class="order-box right">
+            <h3>Actual pipeline</h3>
+            <ol>
+              <li>Chunk the whole corpus</li>
+              <li>Embed &amp; store every chunk (index)</li>
+              <li>Embed the question</li>
+              <li>Rank by similarity → top-k</li>
+              <li>Build prompt (context + question)</li>
+              <li>Generate from that prompt only</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CONTROLS -->
+    <section class="panel">
+      <h2><span class="num">Q</span> Your question</h2>
+      <div class="controls">
+        <div>
+          <label for="query">Question</label>
+          <input id="query" type="text" value="How do I become a PM or an SDE?" />
+        </div>
+        <div class="presets" id="presets"></div>
+        <div class="k-control">
+          <label for="k" style="margin:0">Top-k</label>
+          <input id="k" type="range" min="1" max="4" value="2" />
+          <span id="kVal" style="font-family:var(--mono);color:var(--cyan)">2</span>
+        </div>
+        <div class="btn-row">
+          <button class="btn primary" id="btnPlay" type="button">Play pipeline</button>
+          <button class="btn ghost" id="btnReset" type="button">Reset to sketch</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEPPER -->
+    <div class="steps" id="stepper"></div>
+
+    <!-- STAGE -->
+    <section class="panel" id="stagePanel">
+      <h3 class="stage-title" id="stageTitle">Sketch</h3>
+      <p class="stage-desc" id="stageDesc"></p>
+      <div id="stageBody"></div>
+    </section>
+
+    <div class="footer-nav">
+      <button class="btn" id="btnBack" type="button">← Back</button>
+      <button class="btn primary" id="btnNext" type="button">Next →</button>
+    </div>
+  </div>
+
+  <script>
+    /***********************
+     * Toy RAG engine
+     ***********************/
+    const DIMS = ["definition", "transition", "interview", "craft", "product", "rhythm", "leveling"];
+    const DIM_LABEL = {
+      definition: "Role definition",
+      transition: "Transition",
+      interview: "Interview",
+      craft: "Craft & code",
+      product: "Product sense",
+      rhythm: "Day to day",
+      leveling: "Level & offer"
+    };
+
+    const LEX = {
+      product: { product: 1.15, definition: 0.25 },
+      manager: { definition: 0.7, product: 0.35 },
+      pm: { definition: 0.75, product: 0.9 },
+      role: { definition: 1 },
+      roles: { definition: 1 },
+      user: { product: 0.7 },
+      problem: { product: 0.55, definition: 0.15 },
+      tradeoff: { product: 0.85 },
+      decide: { product: 0.4 },
+      decision: { product: 0.45 },
+      why: { product: 0.25 },
+      spec: { product: 0.45, transition: 0.35 },
+      discovery: { product: 0.45, transition: 0.2 },
+      difference: { definition: 0.85 },
+      versus: { definition: 0.65 },
+      vs: { definition: 0.65 },
+      software: { craft: 0.85, definition: 0.15 },
+      engineer: { craft: 0.7, definition: 0.2 },
+      sde: { craft: 1, definition: 0.35 },
+      code: { craft: 0.95 },
+      coding: { craft: 0.85 },
+      tests: { craft: 0.45 },
+      design: { craft: 0.3, product: 0.15 },
+      bug: { craft: 0.65, interview: 0.3 },
+      debugging: { craft: 0.5, interview: 0.4 },
+      production: { craft: 0.35, interview: 0.3 },
+      ships: { craft: 0.3 },
+      ship: { craft: 0.15, rhythm: 0.3 },
+      shipped: { craft: 0.35, transition: 0.25 },
+      project: { craft: 0.45, transition: 0.2 },
+      language: { craft: 0.5 },
+      system: { craft: 0.25, interview: 0.45 },
+      become: { transition: 1.3 },
+      becoming: { transition: 1.15 },
+      transition: { transition: 1.35 },
+      switch: { transition: 1.1 },
+      path: { transition: 0.85 },
+      transfer: { transition: 1 },
+      internal: { transition: 0.6 },
+      title: { transition: 0.4, leveling: 0.3 },
+      proof: { transition: 0.65 },
+      evidence: { transition: 0.5 },
+      interview: { interview: 1.4 },
+      interviews: { interview: 1.3 },
+      prepare: { interview: 0.95 },
+      preparation: { interview: 1.05 },
+      prep: { interview: 1 },
+      loop: { interview: 0.75 },
+      practice: { interview: 0.55 },
+      screen: { interview: 0.65 },
+      questions: { interview: 0.45 },
+      behavioral: { interview: 0.6 },
+      metric: { product: 0.45, interview: 0.35 },
+      metrics: { product: 0.5, interview: 0.35 },
+      roadmap: { product: 0.55, rhythm: 0.4 },
+      stakeholders: { rhythm: 0.6, product: 0.25 },
+      postmortems: { rhythm: 0.8 },
+      ninety: { rhythm: 0.9 },
+      days: { rhythm: 0.5 },
+      cycle: { rhythm: 0.6 },
+      level: { leveling: 0.95 },
+      levels: { leveling: 1.1 },
+      promotion: { leveling: 0.9 },
+      offer: { leveling: 1 },
+      offers: { leveling: 1.05 },
+      salary: { leveling: 0.95 },
+      negotiate: { leveling: 0.85 },
+      scope: { leveling: 0.75 },
+      ladder: { leveling: 0.8 },
+      senior: { leveling: 0.5 }
+    };
+
+    const BOOK = { title: "Crossing Over", subtitle: "A field guide to PM and SDE" };
+
+    const CHAPTERS = [
+      { n: 1, title: "What the roles are", blurb: "PM owns the problem. SDE owns the solution." },
+      { n: 2, title: "How to transition", blurb: "Proof of the new work before the new title." },
+      { n: 3, title: "Interview preparation", blurb: "The loop is not the same for both roles." },
+      { n: 4, title: "The first ninety days", blurb: "Watch one full cycle before rewriting the roadmap." },
+      { n: 5, title: "Levels and offers", blurb: "Level is scope. An offer is a written ladder." }
+    ];
+
+    const CHUNKS = [
+      { id: "1a", chapter: 1, chapterTitle: "What the roles are", heading: "What a PM is",
+        text: "A product manager role owns the user problem and the tradeoff. They decide what to build and why. The role is that decision, written so other people can act without guessing." },
+      { id: "1b", chapter: 1, chapterTitle: "What the roles are", heading: "What an SDE is",
+        text: "A software engineer owns construction. Design, code, and tests are the work. The role is the solution that ships, not a side task beside someone else's decision." },
+      { id: "2a", chapter: 2, chapterTitle: "How to transition", heading: "Engineer to PM",
+        text: "To become a product manager, transition from inside the team you already have. The path is to write the spec, sit in on discovery, and ship a one-pager before you ask for the title." },
+      { id: "2b", chapter: 2, chapterTitle: "How to transition", heading: "Becoming an SDE",
+        text: "To become a software engineer, treat it as a transition with proof. The path is one shipped project in one language, plus evidence you can explain the work. The title follows that proof." },
+      { id: "2c", chapter: 2, chapterTitle: "How to transition", heading: "Internal transfer",
+        text: "An internal transfer beats a cold switch. Volunteer for the ambiguous ticket, collect proof, then ask what evidence is still missing. The path is evidence, then the title." },
+      { id: "3a", chapter: 3, chapterTitle: "Interview preparation", heading: "The PM loop",
+        text: "Product manager interview preparation is a loop: product sense, execution, and a behavioral story. Expect to design a product for a specific user, defend a metric, and name a real tradeoff." },
+      { id: "3b", chapter: 3, chapterTitle: "Interview preparation", heading: "The SDE loop",
+        text: "Software engineer interview preparation is coding under time pressure, one system-design conversation, and a story about debugging production. Practice the screen out loud." },
+      { id: "4a", chapter: 4, chapterTitle: "The first ninety days", heading: "Watch a cycle",
+        text: "In the first ninety days, map stakeholders, read the last three postmortems, and ship something tiny. Do not announce a roadmap before you have watched one full cycle of the team." },
+      { id: "5a", chapter: 5, chapterTitle: "Levels and offers", heading: "Scope, not years",
+        text: "Levels measure scope, not years in the seat. Negotiate the offer against a written ladder: level, scope, and salary. A senior title without the scope is not a promotion." }
+    ];
+
+    const PRESETS = [
+      { id: "become", label: "How to become one", query: "How do I become a PM or an SDE?" },
+      { id: "interview", label: "Interview prep", query: "How should I prepare for the interview?" },
+      { id: "define", label: "What the roles are", query: "What is a PM versus an SDE?" },
+      { id: "offer", label: "Levels and offers", query: "How do levels, scope, and salary work?" },
+      { id: "ninety", label: "First 90 days", query: "What should I do in the first ninety days?" },
+      { id: "off", label: "Off-book", query: "What is the capital of France?" }
+    ];
+
+    const SCORE_FLOOR = 0.28;
+    const GUESSED = new Set([2, 3]);
+
+    function tokenize(text) {
+      return (text.toLowerCase().match(/[a-z][a-z0-9+]*/g) || []);
+    }
+
+    function zeros() { return DIMS.map(() => 0); }
+
+    function normalize(v) {
+      let s = 0;
+      for (const x of v) s += x * x;
+      const n = Math.sqrt(s);
+      if (!n) return v;
+      return v.map(x => x / n);
+    }
+
+    function embed(text) {
+      const v = zeros();
+      for (const t of tokenize(text)) {
+        const w = LEX[t];
+        if (!w) continue;
+        DIMS.forEach((d, i) => { if (w[d]) v[i] += w[d]; });
+      }
+      return normalize(v);
+    }
+
+    function cosine(a, b) {
+      let s = 0;
+      for (let i = 0; i < a.length; i++) s += a[i] * b[i];
+      return s;
+    }
+
+    function magnitude(v) {
+      let s = 0;
+      for (const x of v) s += x * x;
+      return Math.sqrt(s);
+    }
+
+    function project(v) {
+      const [definition, transition, interview, craft, product, rhythm, leveling] = v;
+      return {
+        x: interview * 1.2 + transition * 0.9 + leveling * 0.55 - definition * 0.15,
+        y: product * 1.05 + definition * 0.72 + rhythm * 0.48 - craft * 0.95
+      };
+    }
+
+    function dimWeights(v) {
+      return DIMS.map((d, i) => ({ dim: d, label: DIM_LABEL[d], value: v[i] || 0 }))
+        .filter(x => x.value > 0.001)
+        .sort((a, b) => b.value - a.value);
+    }
+
+    function overlap(qv, cv) {
+      return DIMS.map((d, i) => ({ dim: d, label: DIM_LABEL[d], value: (qv[i] || 0) * (cv[i] || 0) }))
+        .filter(x => x.value > 0.02)
+        .sort((a, b) => b.value - a.value);
+    }
+
+    const LIBRARY = CHUNKS.map(c => ({ ...c, vec: embed(c.text) }));
+
+    function rank(query) {
+      const q = embed(query);
+      return LIBRARY.map(c => ({ ...c, score: cosine(q, c.vec) }))
+        .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+    }
+
+    function kept(query, k) {
+      return rank(query).filter(r => r.score >= SCORE_FLOOR).slice(0, k);
+    }
+
+    function buildPrompt(query, hits) {
+      const passages = hits.length
+        ? hits.map((h, i) => `[${i + 1}] ch. ${h.chapter} · ${h.heading} · cosine ${h.score.toFixed(2)}\n${h.text}`).join("\n\n")
+        : "(no passages retrieved)";
+      return `You answer using only the passages. If they do not contain the answer, say so. Do not use outside knowledge.\n\nPassages:\n${passages}\n\nQuestion:\n${query.trim() || "(empty)"}`;
+    }
+
+    const LEAD = {
+      definition: "These are different jobs that share a roadmap. One owns the problem. The other owns the software.",
+      transition: "Switch by producing evidence of the new role, ideally on a team that already knows your work. The title comes after the proof.",
+      interview: "Prepare for the loop you will actually sit. Product sense and a metric for PM. Coding, system design, and a production bug for SDE.",
+      craft: "The engineering side is construction: design, code, tests, and a bug you can narrate from report to deploy.",
+      product: "Start from the user problem and the tradeoff. A feature list is not a decision.",
+      rhythm: "Early on, watch one full cycle of the team before you announce a new roadmap.",
+      leveling: "Level is scope, not years. Read the ladder, then negotiate the offer against it."
+    };
+
+    function answerFor(query, hits) {
+      const q = embed(query);
+      const top = hits[0];
+      if (!top || magnitude(q) === 0 || top.score < SCORE_FLOOR) {
+        return { refused: true, text: "None of the retrieved passages cover this. The grounded answer is to say so, rather than invent one from outside the book." };
+      }
+      let best = 0;
+      for (let i = 1; i < q.length; i++) if ((q[i] || 0) > (q[best] || 0)) best = i;
+      const lead = LEAD[DIMS[best]] || LEAD.definition;
+      const cites = hits.map((h, i) => `(${i + 1}) ${h.heading}, ch. ${h.chapter} — ${h.text}`).join("\n\n");
+      return { refused: false, text: `${lead}\n\n${cites}` };
+    }
+
+    function guessNote(hits) {
+      if (!hits.length) return "Nothing cleared the similarity floor. Feeding chapters 2 and 3 in anyway would be noise.";
+      const chapters = new Set(hits.map(h => h.chapter));
+      const label = hits.map(h => `${h.id} (ch. ${h.chapter})`).join(", ");
+      const has2 = chapters.has(2), has3 = chapters.has(3);
+      const outside = [...chapters].some(c => !GUESSED.has(c));
+      if (has2 && has3 && !outside) return `Both chapters you might have guessed are in the rank: ${label}.`;
+      if ((has2 || has3) && !outside)
+        return `Only chapter ${has2 ? 2 : 3} made the cut (${label}). A hunch that always grabs 2 and 3 would still send the other one — the index left it on the shelf.`;
+      if (has2 || has3) return `Partly right. The index kept ${label}.`;
+      return `Chapters 2 and 3 were the wrong grab. The index kept ${label}.`;
+    }
+
+    /***********************
+     * UI state
+     ***********************/
+    const STAGES = [
+      { id: "sketch", label: "Sketch", kicker: "Score", title: "Your mental model", desc: "The pieces are familiar. The order is the lesson." },
+      { id: "corpus", label: "Corpus", kicker: "Before", title: "The whole book is the knowledge base", desc: "Nothing is retrieved yet. Every chapter is available to the index." },
+      { id: "chunk", label: "Chunk", kicker: "Before", title: "Split every chapter", desc: "Chunking is exhaustive. You do not discard chapters 1, 4, or 5 before vectors exist." },
+      { id: "index", label: "Embed", kicker: "Before", title: "Embed the library offline", desc: "Each chunk becomes a vector and is stored. This is the index — it exists before any question." },
+      { id: "query", label: "Question", kicker: "At ask", title: "Embed the question", desc: "Same embedding space as the chunks. Without this, there is nothing to compare." },
+      { id: "retrieve", label: "Retrieve", kicker: "At ask", title: "Similarity search", desc: "Cosine similarity ranks every chunk. Top-k above the floor become context." },
+      { id: "augment", label: "Augment", kicker: "At ask", title: "Build the prompt", desc: "Instructions + retrieved passages + question. That package is what the model sees." },
+      { id: "generate", label: "Generate", kicker: "At ask", title: "Model writes from context", desc: "Simulated generation: a template answers only from retrieved text so you can see grounding without an API." }
+    ];
+
+    let stage = 0;
+    let playing = false;
+    let playTimer = null;
+    let typeTimer = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    function currentQuery() { return $("query").value; }
+    function currentK() { return Number($("k").value); }
+
+    function renderPresets() {
+      const root = $("presets");
+      root.innerHTML = "";
+      PRESETS.forEach(p => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "chip" + (currentQuery() === p.query ? " active" : "");
+        b.textContent = p.label;
+        b.onclick = () => {
+          $("query").value = p.query;
+          renderPresets();
+          renderStage();
+        };
+        root.appendChild(b);
+      });
+    }
+
+    function renderStepper() {
+      const root = $("stepper");
+      root.innerHTML = "";
+      STAGES.forEach((s, i) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "step-btn" + (i === stage ? " active" : "") + (i < stage ? " done" : "");
+        b.innerHTML = `<span class="k">0${i} · ${s.kicker}</span><span>${s.label}</span>`;
+        b.onclick = () => { stopPlay(); stage = i; render(); };
+        root.appendChild(b);
+      });
+    }
+
+    function barsHTML(weights) {
+      if (!weights.length) return `<p style="color:var(--muted);font-size:0.85rem">No active dimensions.</p>`;
+      const max = Math.max(...weights.map(w => w.value), 0.01);
+      return weights.map(w => `
+        <div class="dim-row">
+          <span>${w.label}</span>
+          <div class="bar"><span style="width:${(w.value / max) * 100}%"></span></div>
+          <span>${w.value.toFixed(2)}</span>
+        </div>`).join("");
+    }
+
+    function plotHTML(showQuery, keptIds) {
+      const qv = embed(currentQuery());
+      const hasQ = showQuery && magnitude(qv) > 0;
+      const pts = LIBRARY.map(c => ({ ...c, ...project(c.vec) }));
+      const qp = project(qv);
+      const xs = pts.map(p => p.x).concat(hasQ ? [qp.x] : []);
+      const ys = pts.map(p => p.y).concat(hasQ ? [qp.y] : []);
+      const minX = Math.min(...xs), maxX = Math.max(...xs);
+      const minY = Math.min(...ys), maxY = Math.max(...ys);
+      const dx = maxX - minX || 1, dy = maxY - minY || 1;
+      const map = (x, y) => ({
+        cx: 36 + ((x - minX) / dx) * 568,
+        cy: 28 + (1 - (y - minY) / dy) * 220
+      });
+      const q = map(qp.x, qp.y);
+      let links = "";
+      if (hasQ) {
+        pts.filter(p => keptIds.has(p.id)).forEach(p => {
+          const a = map(p.x, p.y);
+          links += `<line x1="${q.cx}" y1="${q.cy}" x2="${a.cx}" y2="${a.cy}" stroke="#34d399" stroke-width="1.5" opacity="0.7"/>`;
+        });
+      }
+      const dots = pts.map(p => {
+        const a = map(p.x, p.y);
+        const kept = keptIds.has(p.id);
+        const fill = kept ? "#34d399" : "#64748b";
+        return `<g>
+          <circle cx="${a.cx}" cy="${a.cy}" r="${kept ? 9 : 7}" fill="${fill}" opacity="0.95"/>
+          <text x="${a.cx + 11}" y="${a.cy + 4}" fill="#c7d2fe" font-size="11" font-family="ui-monospace,monospace">${p.id}</text>
+        </g>`;
+      }).join("");
+      const star = hasQ
+        ? `<polygon points="${q.cx},${q.cy - 11} ${q.cx + 9},${q.cy} ${q.cx},${q.cy + 11} ${q.cx - 9},${q.cy}" fill="#fbbf24"/>
+           <text x="${q.cx + 14}" y="${q.cy - 8}" fill="#fbbf24" font-size="11">question</text>`
+        : "";
+      return `<svg class="plot" viewBox="0 0 640 280" role="img" aria-label="Vector space sketch">
+        <line x1="28" y1="252" x2="612" y2="252" stroke="rgba(94,234,212,0.2)"/>
+        <line x1="28" y1="20" x2="28" y2="252" stroke="rgba(94,234,212,0.2)"/>
+        ${links}${dots}${star}
+      </svg>
+      <p style="font-size:0.75rem;color:var(--muted);margin-top:6px">2D sketch of a 7-D embedding. Green = kept for the prompt. Rank comes from cosine, not this picture alone.</p>`;
+    }
+
+    function renderStage() {
+      const s = STAGES[stage];
+      $("stageTitle").textContent = s.title;
+      $("stageDesc").textContent = s.desc;
+      const body = $("stageBody");
+      const q = currentQuery();
+      const k = currentK();
+      const ranked = rank(q);
+      const hits = kept(q, k);
+      const qv = embed(q);
+
+      if (s.id === "sketch") {
+        body.innerHTML = `
+          <div class="note">Score this mental model <strong style="color:var(--text)">5 / 10</strong>: right ingredients, inverted order. Embeddings choose passages — they are not applied after you already chose them.</div>
+          <div class="grid-2">
+            <div class="card">
+              <h4>What people often describe</h4>
+              <ol style="padding-left:18px;color:var(--muted);font-size:0.9rem;display:flex;flex-direction:column;gap:6px">
+                <li>Pick a book, then grab chapters that “feel” relevant.</li>
+                <li>Call those the chunks.</li>
+                <li>Embed the chunks you already kept.</li>
+                <li>Format the question and send it to the model.</li>
+              </ol>
+            </div>
+            <div class="card">
+              <h4>What actually runs</h4>
+              <ol style="padding-left:18px;color:var(--muted);font-size:0.9rem;display:flex;flex-direction:column;gap:6px">
+                <li>Chunk the entire book.</li>
+                <li>Embed every chunk and store the vectors.</li>
+                <li>Embed the question the same way.</li>
+                <li>Rank by cosine similarity → top-k.</li>
+                <li>Paste passages + question into a prompt.</li>
+                <li>Generate only from that prompt.</li>
+              </ol>
+            </div>
+          </div>`;
+      } else if (s.id === "corpus") {
+        body.innerHTML = `
+          <div class="grid-2">
+            <div class="book-cover">
+              <div>
+                <div class="eyebrow">Five chapters</div>
+                <h3>${BOOK.title}</h3>
+                <p style="color:var(--muted)">${BOOK.subtitle}</p>
+              </div>
+              <p style="font-size:0.85rem;color:var(--cyan)">Indexed offline · ready for any question</p>
+            </div>
+            <ul class="chapters">
+              ${CHAPTERS.map(c => `<li><span class="n">${c.n}</span><span><strong style="color:var(--text)">${c.title}</strong><br><span style="color:var(--muted);font-size:0.85rem">${c.blurb}</span></span></li>`).join("")}
+            </ul>
+          </div>`;
+      } else if (s.id === "chunk") {
+        body.innerHTML = `
+          <div class="note">Nine passages. A hunch that only kept chapters 2–3 would throw away the rest before search could use them.</div>
+          <div class="grid-2">
+            ${LIBRARY.map(c => `
+              <div class="chunk">
+                <div class="meta"><strong>${c.id} · ${c.heading}</strong><span>ch. ${c.chapter}</span></div>
+                <div style="font-size:0.88rem;color:var(--muted)">${c.text}</div>
+              </div>`).join("")}
+          </div>`;
+      } else if (s.id === "index") {
+        body.innerHTML = `
+          <div class="grid-2">
+            <div>${plotHTML(false, new Set())}</div>
+            <div class="card">
+              <h4>Example vector · ${LIBRARY[2].id}</h4>
+              <p style="font-size:0.85rem;color:var(--muted);margin-bottom:10px">${LIBRARY[2].heading}</p>
+              ${barsHTML(dimWeights(LIBRARY[2].vec))}
+              <p style="font-size:0.8rem;color:var(--muted);margin-top:10px">Toy embedding: words nudge meaning-dimensions, then the vector is normalized. Production systems use neural models — the geometry idea is the same.</p>
+            </div>
+          </div>`;
+      } else if (s.id === "query") {
+        const weights = dimWeights(qv);
+        body.innerHTML = `
+          <div class="grid-2">
+            <div>${plotHTML(true, new Set())}</div>
+            <div class="card">
+              <h4>Question vector</h4>
+              <p style="font-size:0.85rem;color:var(--muted);margin-bottom:10px">${q.trim() || "(empty)"}</p>
+              ${weights.length ? barsHTML(weights) : `<p style="color:var(--amber);font-size:0.9rem">No overlap with the toy vocabulary — retrieval will refuse.</p>`}
+            </div>
+          </div>`;
+      } else if (s.id === "retrieve") {
+        const focus = hits[0] || ranked[0];
+        body.innerHTML = `
+          <div class="note">${guessNote(hits)}</div>
+          <div class="grid-2">
+            <div>${plotHTML(true, new Set(hits.map(h => h.id)))}</div>
+            <div>
+              ${ranked.map((r, i) => {
+                const on = hits.some(h => h.id === r.id);
+                return `<div class="chunk${on ? " kept" : ""}">
+                  <div class="meta"><strong>${i + 1}. ${r.heading}</strong><span>${r.score.toFixed(2)}</span></div>
+                  <div class="bar"><span style="width:${Math.max(0, Math.min(1, r.score)) * 100}%"></span></div>
+                  <div class="meta" style="margin-top:6px"><span>${r.id} · ch. ${r.chapter}</span><span>${on ? "in prompt" : "library only"}</span></div>
+                </div>`;
+              }).join("")}
+            </div>
+          </div>
+          ${focus && magnitude(qv) > 0 ? `<div class="card" style="margin-top:12px"><h4>Why ${focus.id} scores ${focus.score.toFixed(2)}</h4>
+            <p style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">Shared direction = question weight × chunk weight on each dimension.</p>
+            ${barsHTML(overlap(qv, focus.vec))}</div>` : ""}`;
+        // animate bars
+        requestAnimationFrame(() => {
+          body.querySelectorAll(".bar > span").forEach(el => {
+            const w = el.style.width;
+            el.style.width = "0%";
+            requestAnimationFrame(() => { el.style.width = w; });
+          });
+        });
+      } else if (s.id === "augment") {
+        body.innerHTML = `
+          <div class="note">${hits.length ? `${hits.length} passage${hits.length === 1 ? "" : "s"} go into the prompt. Everything else stays invisible to the model.` : "Empty context on purpose — the model should refuse rather than invent."}</div>
+          <pre class="prompt">${escapeHtml(buildPrompt(q, hits))}</pre>`;
+      } else if (s.id === "generate") {
+        const ans = answerFor(q, hits);
+        body.innerHTML = `
+          <p style="font-size:0.85rem;color:var(--muted);margin-bottom:10px">Question: <span style="color:var(--text)">${escapeHtml(q.trim() || "(empty)")}</span>
+            <span class="tag live">${ans.refused ? "refusal" : "grounded"}</span></p>
+          <div class="answer${ans.refused ? " refuse" : ""}" id="answerBox"></div>
+          <p style="font-size:0.75rem;color:var(--muted);margin-top:10px">Simulated model — no network call. Real systems send the previous prompt to an LLM.</p>`;
+        typewrite($("answerBox"), ans.text);
+      }
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function typewrite(el, text) {
+      if (typeTimer) clearInterval(typeTimer);
+      if (!el) return;
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (reduce) { el.textContent = text; return; }
+      el.textContent = "";
+      let i = 0;
+      typeTimer = setInterval(() => {
+        i += 3;
+        el.textContent = text.slice(0, i);
+        if (i >= text.length) {
+          clearInterval(typeTimer);
+          typeTimer = null;
+        }
+      }, 14);
+    }
+
+    function render() {
+      $("kVal").textContent = String(currentK());
+      renderPresets();
+      renderStepper();
+      renderStage();
+      $("btnBack").disabled = stage === 0;
+      $("btnNext").textContent = stage >= STAGES.length - 1 ? "Start over →" : "Next →";
+    }
+
+    function stopPlay() {
+      playing = false;
+      if (playTimer) { clearInterval(playTimer); playTimer = null; }
+      $("btnPlay").textContent = "Play pipeline";
+    }
+
+    function startPlay() {
+      stopPlay();
+      playing = true;
+      $("btnPlay").textContent = "Pause";
+      if (stage >= STAGES.length - 1) stage = 0;
+      render();
+      playTimer = setInterval(() => {
+        if (stage >= STAGES.length - 1) { stopPlay(); return; }
+        stage += 1;
+        render();
+      }, 3200);
+    }
+
+    $("query").addEventListener("input", () => { renderPresets(); renderStage(); });
+    $("k").addEventListener("input", () => { $("kVal").textContent = $("k").value; renderStage(); });
+    $("btnPlay").onclick = () => { if (playing) stopPlay(); else startPlay(); };
+    $("btnReset").onclick = () => { stopPlay(); stage = 0; render(); };
+    $("btnBack").onclick = () => { stopPlay(); stage = Math.max(0, stage - 1); render(); };
+    $("btnNext").onclick = () => {
+      stopPlay();
+      if (stage >= STAGES.length - 1) stage = 0;
+      else stage += 1;
+      render();
+    };
+
+    render();
+  </script>
+</body>
+</html>
